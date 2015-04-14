@@ -2,27 +2,18 @@
 
 host=$1
 
-get_host_info() {
-	reply_msg=$1
-	host_info=$(
-		echo "$reply_msg" |
-		grep -o -e "^PING .*$" |
-		cut -d ' ' -f 2,3
-	)
-	echo $host_info
-}
-
-get_hop_info() {
-	reply_msg=$1
-	hop_info=$(
-		echo "$reply_msg" |
-		grep -o -e "^From .*$" |
-		tail -n 1 |
-		cut -d ' ' -f 2,3 |
+get_info() {
+	reply=$1
+	info=$(
+		echo "$reply" |
+		grep -i "from" |
+		sed "s/^.*[Ff]rom\ \(.*\)/\1/" |
+		cut -d ' ' -f 1,2 |
+		cut -d ':' -f 1 |
 		sed 's/^\([0-9]\{1,3\}\(\.[0-9]\{1,3\}\)\{3\}\).*$/\1\ (\1)/'
 	)
-	if [ -n "$hop_info" ]; then
-		echo "$hop_info"
+	if [ -n "$info" ]; then
+		echo "$info"
 	else
 		echo "? (?)"
 	fi
@@ -41,9 +32,9 @@ get_hostname() {
 }
 
 get_avg_ping() {
-	reply_msg=$1
+	reply=$1
 	avg_ping=$(
-		echo "$reply_msg" |
+		echo "$reply" |
 		grep 'rtt' |
 		cut -d '/' -f 5
 	)
@@ -57,23 +48,23 @@ for (( hop = 0; hop < 64; hop++ )); do
 	reply=`ping -c 1 -t $hop $host`
 
 	if [ $? -eq 1 ]; then
-		hop_info=$(get_hop_info "$reply")
-		hop_ip=$(get_ip "$hop_info")
+		info=$(get_info "$reply")
+		ip=$(get_ip "$info")
 
-		if [ "$hop_ip" = "?" ]; then
+		if [ "$ip" = "?" ]; then
 			avg_ping="?"
 		else
-			hop_reply=`ping -c 1 -q $hop_ip`
-			avg_ping=$(get_avg_ping "$hop_reply")
+			reply=`ping -c 1 -q $ip`
+			avg_ping=$(get_avg_ping "$reply")
 		fi
 		
-		echo "$hop - $hop_info - $avg_ping ms"
+		echo "$hop - $info - $avg_ping ms"
 	else
-		host_info=$(get_host_info "$reply")
-		host_ip=$(get_ip "$host_info")
-		host_reply=`ping -c 1 $host_ip`
-		avg_ping=$(get_avg_ping "$host_reply")
-		echo "$hop - $host_info - $avg_ping ms"
+		info=$(get_info "$reply")
+		ip=$(get_ip "$info")
+		reply=`ping -c 1 $ip`
+		avg_ping=$(get_avg_ping "$reply")
+		echo "$hop - $info - $avg_ping ms"
 		break
 	fi
 done
