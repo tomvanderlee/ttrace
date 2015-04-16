@@ -44,30 +44,64 @@ get_avg_ping() {
 	echo "$avg_ping"
 }
 
-last_hop=0
-for (( hop = 1; hop < 64; hop++ )); do 
-	reply=$(ping -c 1 -t $hop $host)
-	err=$?
+add_to_buffer() {
+	buffer=$1
+	line=$2
+	
+	if [ -n "$buffer" ]; then
+		echo -e "$buffer\r\n$line" |
+		sort
+	else
+		echo -e "$line"
+	fi
+}
 
-	{
-		info=$(get_info "$reply")
-		ip=$(get_ip "$info")
+{
+	last_hop=0
+	for (( hop = 1; hop < 64; hop++ )); do 
+		reply=$(ping -c 1 -t $hop $host)
+		err=$?
 
-		if [ "$ip" = "?" ]; then
-			avg_ping="?"
+		{
+			info=$(get_info "$reply")
+			ip=$(get_ip "$info")
+
+			if [ "$ip" = "?" ]; then
+				avg_ping="?"
+			else
+				reply=$(ping -c 1 -i 0.2 -q $ip)
+				avg_ping=$(get_avg_ping "$reply")
+			fi
+				
+			echo "$hop - $avg_ping ms - $info"
+			last_hop=$hop
+		}&
+
+		[[ $err == 1 ]] || break
+	done 
+} | {
+	last_hop=0
+	while read line; do
+		hop=$(echo $line | cut -d " " -f 1)
+		if [ $(expr $hop - 1 == $last_hop) -eq 1 ]; then
+			echo -e "$line"
+			last_hop=$hop
 		else
-			reply=$(ping -c 5 -i 0.2 -q $ip)
-			avg_ping=$(get_avg_ping "$reply")
+			buffer=$(add_to_buffer "$buffer" "$line")
 		fi
 		
-		if test $(expr $hop - 1 == $last_hop); then
-			echo "$hop - $info - $avg_ping ms"
-			last_hop=$hop
-		fi
-	}&
+		if [ -n "$buffer" ]; then
+			buffer_head=$(echo -e "$buffer" | head -n 1)
+			hop=$(echo "$buffer_head" | cut -d " " -f 1)
 
-	[[ $err == 1 ]] || break
-done
+			if [ $(expr $hop - 1 == $last_hop) -eq 1 ]; then
+				echo -e "$buffer_head"
+				last_hop=$hop
+				buffer=$(echo -e "$buffer" | tail -n +2)
+			fi
+		fi
+	done
+}
 
 wait
 
