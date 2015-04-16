@@ -44,29 +44,31 @@ get_avg_ping() {
 	echo "$avg_ping"
 }
 
-for (( hop = 0; hop < 64; hop++ )); do 
-	reply=`ping -c 1 -t $hop $host`
+last_hop=0
+for (( hop = 1; hop < 64; hop++ )); do 
+	reply=$(ping -c 1 -t $hop $host)
+	err=$?
 
-	if [ $? -eq 1 ]; then
+	{
 		info=$(get_info "$reply")
 		ip=$(get_ip "$info")
 
 		if [ "$ip" = "?" ]; then
 			avg_ping="?"
 		else
-			reply=`ping -c 1 -q $ip`
+			reply=$(ping -c 5 -i 0.2 -q $ip)
 			avg_ping=$(get_avg_ping "$reply")
 		fi
 		
-		echo "$hop - $info - $avg_ping ms"
-	else
-		info=$(get_info "$reply")
-		ip=$(get_ip "$info")
-		reply=`ping -c 1 $ip`
-		avg_ping=$(get_avg_ping "$reply")
-		echo "$hop - $info - $avg_ping ms"
-		break
-	fi
+		if test $(expr $hop - 1 == $last_hop); then
+			echo "$hop - $info - $avg_ping ms"
+			last_hop=$hop
+		fi
+	}&
+
+	[[ $err == 1 ]] || break
 done
+
+wait
 
 # vim: set ts=8 sw=8 tw=0 noet :
